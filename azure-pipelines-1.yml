@@ -21,8 +21,6 @@ variables:
   vmImageName: 'ubuntu-latest'
   azureServiceConnection: 'Azure subscription 1(525c7c1f-f5e9-4bf4-8d7a-5b7a06889a12)'
   
-  # Logic to map Branch Name to Environment Name
-  # Azure DevOps evaluates these at compile time
   ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
     envName: 'prod'
   ${{ if eq(variables['Build.SourceBranchName'], 'stage') }}:
@@ -31,12 +29,9 @@ variables:
     envName: 'qa'
   ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
     envName: 'dev'
-  
-  # Fallback: If the branch is NOT one of the above, use the parameter dropdown
   ${{ if not(in(variables['Build.SourceBranchName'], 'main', 'stage', 'qa', 'dev')) }}:
     envName: ${{ parameters.environment }}
 
-  # Dynamic strings based on the detected environment
   tfVars: '-var-file=environments/$(envName)/terraform.tfvars'
   extraVars: '-var="subscription_id=$(SUB_ID)"'
 
@@ -62,6 +57,50 @@ stages:
         backendAzureRmResourceGroupName: 'terraform-deploy'
         backendAzureRmStorageAccountName: 'terraformsflg'
         backendAzureRmContainerName: 'tf-aks-build'
-        # Unique state file prevents environments from overwriting each other
         backendAzureRmKey: '$(envName).terraform.tfstate' 
         backendAzureRmUseAzureAd: true
+
+    - task: TerraformTask@5
+      displayName: 'Plan'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        commandOptions: '$(tfVars) $(extraVars)'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+
+- stage: Apply
+  displayName: Apply - $(envName)
+  dependsOn: Plan
+  condition: succeeded()
+  jobs:
+  - deployment: Terraform_Apply
+    environment: '$(envName)' 
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTask@5
+            displayName: 'Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'terraform-deploy'
+              backendAzureRmStorageAccountName: 'terraformsflg'
+              backendAzureRmContainerName: 'tf-aks-build'
+              backendAzureRmKey: '$(envName).terraform.tfstate' 
+              backendAzureRmUseAzureAd: true
+          
+          - task: TerraformTask@5
+            displayName: 'Apply'
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              commandOptions: '$(tfVars) $(extraVars) -auto-approve'
+              environmentServiceNameAzureRM: $(azureServiceConnection)
