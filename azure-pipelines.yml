@@ -1,5 +1,15 @@
 trigger: none
 
+parameters:
+- name: environment
+  displayName: Target Environment
+  type: string
+  default: prod
+  values:
+  - dev
+  - stage
+  - prod
+
 variables:
   vmImageName: 'ubuntu-latest'
   # The name of your Service Connection
