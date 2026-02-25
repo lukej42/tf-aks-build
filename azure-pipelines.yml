@@ -13,6 +13,13 @@ stages:
   jobs:
   - job: Terraform_Plan
     steps:
+    # 1. Install Terraform first
+    - task: TerraformInstaller@1
+      displayName: 'Install Terraform'
+      inputs:
+        terraformVersion: 'latest'
+
+    # 2. Init
     - task: TerraformTask@5
       displayName: 'Init'
       inputs:
@@ -24,6 +31,7 @@ stages:
         backendAzureRmContainerName: 'tf-aks-build'
         backendAzureRmKey: 'terraform.tfstate'
     
+    # 3. Plan
     - task: TerraformTask@5
       displayName: 'Plan'
       inputs:
@@ -37,12 +45,20 @@ stages:
   condition: succeeded()
   jobs:
   - deployment: Terraform_Apply
-    environment: 'production' # This triggers the manual approval UI in Azure DevOps
+    environment: 'production' 
     strategy:
       runOnce:
         deploy:
           steps:
           - checkout: self
+          
+          # 1. Install Terraform again (new agent)
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'
+
+          # 2. Init again (new agent)
           - task: TerraformTask@5
             displayName: 'Init'
             inputs:
@@ -54,10 +70,11 @@ stages:
               backendAzureRmContainerName: 'tf-aks-build'
               backendAzureRmKey: 'terraform.tfstate'
           
+          # 3. Apply
           - task: TerraformTask@5
             displayName: 'Apply'
             inputs:
               provider: 'azurerm'
               command: 'apply'
-              commandOptions: '$(tfVars) -auto-approve' # Added auto-approve since it's scripted
+              commandOptions: '$(tfVars) -auto-approve'
               environmentServiceNameAzureRM: $(azureServiceConnection)
