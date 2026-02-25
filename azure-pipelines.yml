@@ -1,0 +1,63 @@
+trigger: none
+
+variables:
+  vmImageName: 'ubuntu-latest'
+  azureServiceConnection: 'Azure subscription 1(525c7c1f-f5e9-4bf4-8d7a-5b7a06889a12)'
+  tfVars: '-var-file=environments/prod/terraform.tfvars'
+
+pool:
+  vmImage: $(vmImageName)
+
+stages:
+- stage: Plan
+  jobs:
+  - job: Terraform_Plan
+    steps:
+    - task: TerraformTask@5
+      displayName: 'Init'
+      inputs:
+        provider: 'azurerm'
+        command: 'init'
+        backendServiceArm: $(azureServiceConnection)
+        backendAzureRmResourceGroupName: 'terraform-deploy'
+        backendAzureRmStorageAccountName: 'terraformsflg'
+        backendAzureRmContainerName: 'tf-aks-build'
+        backendAzureRmKey: 'terraform.tfstate'
+    
+    - task: TerraformTask@5
+      displayName: 'Plan'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        commandOptions: '$(tfVars)'
+        environmentServiceNameAzureRM: $(azureServiceConnection)
+
+- stage: Apply
+  dependsOn: Plan
+  condition: succeeded()
+  jobs:
+  - deployment: Terraform_Apply
+    environment: 'production' # This triggers the manual approval UI in Azure DevOps
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: TerraformTask@5
+            displayName: 'Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              backendServiceArm: $(azureServiceConnection)
+              backendAzureRmResourceGroupName: 'terraform-deploy'
+              backendAzureRmStorageAccountName: 'terraformsflg'
+              backendAzureRmContainerName: 'tf-aks-build'
+              backendAzureRmKey: 'terraform.tfstate'
+          
+          - task: TerraformTask@5
+            displayName: 'Apply'
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              commandOptions: '$(tfVars) -auto-approve' # Added auto-approve since it's scripted
+              environmentServiceNameAzureRM: $(azureServiceConnection)
