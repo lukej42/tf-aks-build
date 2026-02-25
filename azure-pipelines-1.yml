@@ -1,4 +1,3 @@
-
 trigger:
   branches:
     include:
@@ -22,18 +21,22 @@ variables:
   vmImageName: 'ubuntu-latest'
   azureServiceConnection: 'Azure subscription 1(525c7c1f-f5e9-4bf4-8d7a-5b7a06889a12)'
   
+  # Logic to map Branch Name to Environment Name
+  # Azure DevOps evaluates these at compile time
   ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
     envName: 'prod'
-  ${{ elif eq(variables['Build.SourceBranchName'], 'stage') }}:
+  ${{ if eq(variables['Build.SourceBranchName'], 'stage') }}:
     envName: 'stage'
-  ${{ elif eq(variables['Build.SourceBranchName'], 'qa') }}:
+  ${{ if eq(variables['Build.SourceBranchName'], 'qa') }}:
     envName: 'qa'
-  ${{ elif eq(variables['Build.SourceBranchName'], 'dev') }}:
+  ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
     envName: 'dev'
-  # Fallback: If it's a manual run, use the parameter value
-  ${{ else }}:
+  
+  # Fallback: If the branch is NOT one of the above, use the parameter dropdown
+  ${{ if not(in(variables['Build.SourceBranchName'], 'main', 'stage', 'qa', 'dev')) }}:
     envName: ${{ parameters.environment }}
 
+  # Dynamic strings based on the detected environment
   tfVars: '-var-file=environments/$(envName)/terraform.tfvars'
   extraVars: '-var="subscription_id=$(SUB_ID)"'
 
@@ -59,52 +62,6 @@ stages:
         backendAzureRmResourceGroupName: 'terraform-deploy'
         backendAzureRmStorageAccountName: 'terraformsflg'
         backendAzureRmContainerName: 'tf-aks-build'
-        # Unique state file per branch/env
+        # Unique state file prevents environments from overwriting each other
         backendAzureRmKey: '$(envName).terraform.tfstate' 
         backendAzureRmUseAzureAd: true
-
-    - task: TerraformTask@5
-      displayName: 'Plan'
-      inputs:
-        provider: 'azurerm'
-        command: 'plan'
-        commandOptions: '$(tfVars) $(extraVars)'
-        environmentServiceNameAzureRM: $(azureServiceConnection)
-
-- stage: Apply
-  displayName: Apply - $(envName)
-  dependsOn: Plan
-  condition: succeeded()
-  jobs:
-  - deployment: Terraform_Apply
-    # Links to the specific Environment (dev, qa, stage, prod) in ADO
-    environment: '$(envName)' 
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
-          
-          - task: TerraformInstaller@1
-            inputs:
-              terraformVersion: 'latest'
-
-          - task: TerraformTask@5
-            displayName: 'Init'
-            inputs:
-              provider: 'azurerm'
-              command: 'init'
-              backendServiceArm: $(azureServiceConnection)
-              backendAzureRmResourceGroupName: 'terraform-deploy'
-              backendAzureRmStorageAccountName: 'terraformsflg'
-              backendAzureRmContainerName: 'tf-aks-build'
-              backendAzureRmKey: '$(envName).terraform.tfstate' 
-              backendAzureRmUseAzureAd: true
-          
-          - task: TerraformTask@5
-            displayName: 'Apply'
-            inputs:
-              provider: 'azurerm'
-              command: 'apply'
-              commandOptions: '$(tfVars) $(extraVars) -auto-approve'
-              environmentServiceNameAzureRM: $(azureServiceConnection)
