@@ -12,11 +12,8 @@ parameters:
 
 variables:
   vmImageName: 'ubuntu-latest'
-  # The name of your Service Connection
   azureServiceConnection: 'Azure subscription 1(525c7c1f-f5e9-4bf4-8d7a-5b7a06889a12)'
-  # The common var file path
-  tfVars: '-var-file=environments/prod/terraform.tfvars'
-  # Injecting your secret variable here (replace MY_SUB_ID_VAR with your actual variable name)
+  tfVars: '-var-file=environments/${{ parameters.environment }}/terraform.tfvars'
   extraVars: '-var="subscription_id=$(SUB_ID)"'
 
 pool:
@@ -24,11 +21,11 @@ pool:
 
 stages:
 - stage: Plan
+  displayName: Plan - ${{ parameters.environment }}
   jobs:
   - job: Terraform_Plan
     steps:
     - task: TerraformInstaller@1
-      displayName: 'Install Terraform'
       inputs:
         terraformVersion: 'latest'
 
@@ -41,7 +38,8 @@ stages:
         backendAzureRmResourceGroupName: 'terraform-deploy'
         backendAzureRmStorageAccountName: 'terraformsflg'
         backendAzureRmContainerName: 'tf-aks-build'
-        backendAzureRmKey: 'terraform.tfstate'
+        # FIX: Unique state file per environment
+        backendAzureRmKey: '${{ parameters.environment }}.terraform.tfstate' 
         backendAzureRmUseAzureAd: true
 
     - task: TerraformTask@5
@@ -49,16 +47,17 @@ stages:
       inputs:
         provider: 'azurerm'
         command: 'plan'
-        # Combines your file-based vars and your secret variable
         commandOptions: '$(tfVars) $(extraVars)'
         environmentServiceNameAzureRM: $(azureServiceConnection)
 
 - stage: Apply
+  displayName: Apply - ${{ parameters.environment }}
   dependsOn: Plan
   condition: succeeded()
   jobs:
   - deployment: Terraform_Apply
-    environment: 'production'
+    # FIX: Link to the specific environment for separate approval gates
+    environment: '${{ parameters.environment }}' 
     strategy:
       runOnce:
         deploy:
@@ -79,7 +78,8 @@ stages:
               backendAzureRmResourceGroupName: 'terraform-deploy'
               backendAzureRmStorageAccountName: 'terraformsflg'
               backendAzureRmContainerName: 'tf-aks-build'
-              backendAzureRmKey: 'terraform.tfstate'
+              # FIX: Must match the Init key in the Plan stage
+              backendAzureRmKey: '${{ parameters.environment }}.terraform.tfstate' 
               backendAzureRmUseAzureAd: true
           
           - task: TerraformTask@5
@@ -87,6 +87,5 @@ stages:
             inputs:
               provider: 'azurerm'
               command: 'apply'
-              # Note the -auto-approve added here for non-interactive pipeline run
               commandOptions: '$(tfVars) $(extraVars) -auto-approve'
               environmentServiceNameAzureRM: $(azureServiceConnection)
