@@ -17,3 +17,4 @@ keyvaultname = "kv-stage-secrets1992"
 nsgname = "stage_nsg"
 acr_name = "lgexample654"
 acr_sku = "Basic"
+node_count = 2

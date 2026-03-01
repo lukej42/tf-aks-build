@@ -17,3 +17,4 @@ keyvaultname = "kv-prodsecrets1992"
 nsgname = "prod_nsg"
 acr_name = "lgexample654"
 acr_sku = "Basic"
+node_count = 2
