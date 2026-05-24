@@ -8,7 +8,7 @@ trigger:
 
 parameters:
 - name: environment
-  displayName: Target Environment (Manual Override)
+  displayName: Target Environment (Manual Override / Branch Target)
   type: string
   default: dev
   values:
@@ -20,7 +20,8 @@ parameters:
 variables:
   vmImageName: 'ubuntu-latest'
   azureServiceConnection: 'Azure subscription 1(525c7c1f-f5e9-4bf4-8d7a-5b7a06889a12)'
-  
+
+  # 1. Map branches directly to their environments at compile-time
   ${{ if eq(variables['Build.SourceBranchName'], 'main') }}:
     envName: 'prod'
   ${{ if eq(variables['Build.SourceBranchName'], 'stage') }}:
@@ -29,7 +30,8 @@ variables:
     envName: 'qa'
   ${{ if eq(variables['Build.SourceBranchName'], 'dev') }}:
     envName: 'dev'
-  ${{ if not(in(variables['Build.SourceBranchName'], 'main', 'stage', 'qa', 'dev')) }}:
+    
+  ${{ if eq(variables['Build.Reason'], 'Manual') }}:
     envName: ${{ parameters.environment }}
 
   tfVars: '-var-file=environments/$(envName)/terraform.tfvars'
@@ -40,7 +42,7 @@ pool:
 
 stages:
 - stage: Plan
-  displayName: Plan - $(envName)
+  displayName: Plan Deployment
   jobs:
   - job: Terraform_Plan
     steps:
@@ -57,6 +59,7 @@ stages:
         backendAzureRmResourceGroupName: 'terraform-deploy'
         backendAzureRmStorageAccountName: 'terraformsflg'
         backendAzureRmContainerName: 'tf-aks-build'
+        # Crucial Fix: Using the compiled envName variable
         backendAzureRmKey: '$(envName).terraform.tfstate' 
         backendAzureRmUseAzureAd: true
 
@@ -69,7 +72,7 @@ stages:
         environmentServiceNameAzureRM: $(azureServiceConnection)
 
 - stage: Apply
-  displayName: Apply - $(envName)
+  displayName: Apply Deployment
   dependsOn: Plan
   condition: succeeded()
   jobs:
