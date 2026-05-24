@@ -16,5 +16,6 @@ vm-size = "Standard_B1s"
 keyvaultname = "kv-stage-secrets1992"
 nsgname = "stage_nsg"
 acr_name = "lgexample654"
+aksname = "demo-aks-stage"
 acr_sku = "Basic"
 node_count = 2

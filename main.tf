@@ -30,7 +30,7 @@ provider "azurerm" {
 module "aks" {
   source = "./modules/aks"
 
-  aks_name            = "demo-aks"
+  aks_name            = var.aksname
   resource_group_name = var.resource_group_name
   location            = var.location
   dns_prefix          = "demoaks"

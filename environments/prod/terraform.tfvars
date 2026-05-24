@@ -16,5 +16,6 @@ vm-size = "Standard_B1s"
 keyvaultname = "kv-prodsecrets1992"
 nsgname = "prod_nsg"
 acr_name = "lgexample654"
+aksname = "demo-aks"
 acr_sku = "Basic"
 node_count = 2
